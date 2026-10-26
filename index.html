@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SignalStack — Incident Triage</title>
+<style>
+:root{font-family:Inter,system-ui,sans-serif;color:#f1f5fb;background:#0d1324}*{box-sizing:border-box}body{margin:0}header{padding:24px 6%;border-bottom:1px solid #26334a;display:flex;justify-content:space-between;align-items:center}header a{color:#c1b9ff}main{max-width:1150px;margin:auto;padding:40px 20px}h1{margin:0;font-size:24px}h2{font-size:32px;margin:8px 0}p,small{color:#9daac4}.accent{color:#a6a0ff}.eyebrow{color:#a6a0ff;letter-spacing:2px;text-transform:uppercase;font-size:12px}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:26px 0}.card,.panel{background:#151f33;border:1px solid #2b3a54;border-radius:14px;padding:22px}.card strong{font-size:32px;display:block;margin-top:8px}.layout{display:grid;grid-template-columns:330px minmax(0,1fr);gap:16px}label{font-size:13px;display:block;margin:16px 0 7px;color:#bdc8da}input,textarea,select{width:100%;padding:12px;border:1px solid #364663;border-radius:8px;background:#0e172a;color:white;font:inherit}textarea{min-height:110px}button{border:0;padding:12px 15px;border-radius:8px;background:#7979e8;color:white;font-weight:bold;cursor:pointer;margin:12px 8px 0 0}.secondary{background:#2e3b56}.tablewrap{overflow-x:auto}table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;padding:12px;border-bottom:1px solid #2b3a54}th{color:#9daac4}td p{margin:4px 0;overflow-wrap:anywhere}.pill{border-radius:20px;padding:4px 8px;font-size:11px;text-transform:uppercase;font-weight:700}.critical{background:#552b43;color:#ffb2c5}.high{background:#5a3f2a;color:#ffd1a4}.medium{background:#51492c;color:#ffe5a0}.low{background:#24483d;color:#b5e9c9}.status{min-width:120px}#feedback{min-height:22px;color:#a5e9cb;font-size:13px;margin-top:10px}@media(max-width:850px){.layout{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,1fr)}}@media(max-width:450px){main{padding:22px 12px}.card,.panel{padding:14px}.card strong{font-size:26px}header{padding:16px}}
+</style></head><body><header><h1>◈ Signal<span class="accent">Stack</span></h1><span style="color:#9daac4;font-size:13px">Browser demo · No API key</span></header><main><div class="eyebrow">Operations / Overview</div><h2>Incident command center</h2><p>Group noisy alerts, classify incidents, and prioritize what matters. Data is saved in this browser.</p><div class="stats"><div class="card"><small>Alert events</small><strong id="events">0</strong></div><div class="card"><small>Active incidents</small><strong id="active">0</strong></div><div class="card"><small>Duplicates grouped</small><strong id="dupes">0</strong></div><div class="card"><small>Critical active</small><strong id="critical">0</strong></div></div><div class="layout"><section class="panel"><h3>Send an alert</h3><form id="form"><label>Service<input id="service" required minlength="2" value="checkout-api"></label><label>Alert message<textarea id="message" required minlength="4">Database timeout after 3000ms</textarea></label><label>Severity<select id="severity"><option value="auto">Auto-detect</option><option>low</option><option>medium</option><option>high</option><option>critical</option></select></label><button>Process alert</button><button type="button" id="demo" class="secondary">Load demo data</button></form><div id="feedback" role="status"></div><p>Try sending the same alert with a different number to see deduplication.</p></section><section class="panel"><h3>Incident queue <button class="secondary" id="refresh">↻ Refresh</button></h3><div class="tablewrap"><table><thead><tr><th>Incident</th><th>Severity</th><th>Count</th><th>Status</th></tr></thead><tbody id="list"></tbody></table></div></section></div></main><script>
+const el=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const KEY='signalstack-incidents-v1';
+let items=[];
+try { const stored=JSON.parse(localStorage.getItem(KEY)||'[]'); if(Array.isArray(stored))items=stored; } catch(e) { items=[]; }
+const ranks={low:0,medium:1,high:2,critical:3};
+const rules=[
+  [['outage','service down','data breach','unauthorized'],'critical','Escalate to on-call and check the blast radius.'],
+  [['timeout','database','unavailable','connection refused','latency','500 error'],'high','Check dependencies, latency, logs and recent deploys.'],
+  [['429','rate limit','retry','queue backlog'],'medium','Inspect traffic and queue metrics.'],
+  [['warning','deprecated','cache miss'],'low','Monitor trends and schedule a fix.']
+];
+function classify(message){
+  const s=message.toLowerCase();
+  for(const [words,level,advice] of rules)if(words.some(w=>s.includes(w)))return [level,advice];
+  return ['medium','Review logs and traces to identify the cause.'];
+}
+function fingerprint(service,message){return service.trim().toLowerCase()+':'+message.trim().toLowerCase().replace(/\s+/g,' ').replace(/\d+/g,'<num>');}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(items));return true}catch(e){el('feedback').textContent='Unable to save in this browser.';return false}}
+function ingest(service,message,severity='auto'){
+  service=service.trim().toLowerCase();message=message.trim();
+  if(service.length<2||message.length<4)throw Error('Enter a service and an alert message.');
+  const key=fingerprint(service,message);
+  const [detected,recommendation]=classify(message);
+  const level=severity==='auto'?detected:severity;
+  const previous=items.find(i=>i.fingerprint===key);
+  if(previous){
+    previous.occurrences++;
+    previous.last_seen=new Date().toISOString();
+    previous.status='open';
+    if(ranks[level]>ranks[previous.severity])previous.severity=level;
+  }else{
+    items.push({id:items.reduce((n,x)=>Math.max(n,x.id),0)+1,fingerprint:key,service,message,severity:level,status:'open',occurrences:1,first_seen:new Date().toISOString(),last_seen:new Date().toISOString(),recommendation});
+  }
+  save();return !!previous;
+}
+function refresh(){
+  const total=items.reduce((n,x)=>n+x.occurrences,0);
+  el('events').textContent=total;
+  el('active').textContent=items.filter(i=>i.status!=='resolved').length;
+  el('dupes').textContent=total-items.length;
+  el('critical').textContent=items.filter(i=>i.status!=='resolved'&&i.severity==='critical').length;
+  const sorted=[...items].sort((a,b)=>ranks[b.severity]-ranks[a.severity]||b.last_seen.localeCompare(a.last_seen)).slice(0,50);
+  el('list').innerHTML=sorted.length?sorted.map(i=>
+    '<tr><td><b>'+esc(i.service)+'</b><p>'+esc(i.message)+'</p><p>'+esc(i.recommendation)+'</p></td><td><span class="pill '+esc(i.severity)+'">'+esc(i.severity)+'</span></td><td>×'+i.occurrences+'</td><td><select class="status" data-id="'+i.id+'">'+
+    ['open','investigating','resolved'].map(v=>'<option value="'+v+'" '+(i.status===v?'selected':'')+'>'+v+'</option>').join('')+'</select></td></tr>'
+  ).join(''):'<tr><td colspan="4">No incidents yet. Send an alert or load demo data.</td></tr>';
+}
+el('form').addEventListener('submit',e=>{
+  e.preventDefault();
+  try{
+    const duplicate=ingest(el('service').value,el('message').value,el('severity').value);
+    el('feedback').textContent=duplicate?'Duplicate grouped with existing incident.':'New incident created.';
+    refresh();
+  }catch(err){el('feedback').textContent=err.message}
+});
+el('demo').addEventListener('click',()=>{
+  [['checkout-api','Database timeout after 3000ms'],['checkout-api','Database timeout after 4500ms'],['auth-service','Unauthorized access detected'],['worker','Queue backlog of 500 jobs'],['gateway','Rate limit 429 exceeded'],['catalog','Cache miss warning']].forEach(([s,m])=>ingest(s,m));
+  el('feedback').textContent='Demo alerts processed.';refresh();
+});
+el('refresh').addEventListener('click',()=>{refresh();el('feedback').textContent='Incident queue refreshed.'});
+el('list').addEventListener('change',e=>{
+  if(!e.target.matches('[data-id]'))return;
+  const item=items.find(i=>String(i.id)===e.target.dataset.id);
+  if(!item)return;
+  item.status=e.target.value;
+  save();refresh();el('feedback').textContent='Incident status updated.';
+});
+refresh();
+</script></body></html>
