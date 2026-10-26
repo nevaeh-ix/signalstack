@@ -1,8 +1,18 @@
 # SignalStack
 
-An incident-triage REST API and responsive dashboard built with **Python, FastAPI, SQLite, and JavaScript**. Built for a Unkey Compute demonstration.
+An incident-triage dashboard with a key-free browser demo and an optional **Python, FastAPI, and SQLite** backend.
 
-## Features
+## Website
+
+[Open SignalStack](https://nevaeh-ix.github.io/signalstack/)
+
+The GitHub Pages dashboard processes alerts, groups duplicates, prioritizes incidents and saves status changes in your browser. No API key, paid hosting or server setup is needed. Click **Load demo data** to try it.
+
+Both `index.html` and `static/index.html` run the same browser dashboard. Data stays on the browser and device you use. If browser storage is unavailable, the dashboard still works for the current tab and shows a notice. Classification uses keyword rules.
+
+Run the dashboard checks with `node tests/test_dashboard.cjs`.
+
+## Optional backend API
 
 - `POST /api/alerts` — ingest alerts, classify severity and group duplicates
 - `GET /api/incidents` — retrieve the severity-prioritized incident queue
@@ -11,7 +21,7 @@ An incident-triage REST API and responsive dashboard built with **Python, FastAP
 - `POST /api/demo` — add six sample alerts
 - `GET /health` — health endpoint
 - `/docs` — interactive API documentation
-- `/` — responsive dashboard
+- `/` — browser dashboard (stores incidents locally; API records are separate)
 
 ## Local setup
 
@@ -43,3 +53,4 @@ Send another alert with a different timeout number. SignalStack normalizes numbe
 ## Stack
 
 Python · FastAPI · Pydantic · SQLite · JavaScript · Docker · OpenAPI
+
